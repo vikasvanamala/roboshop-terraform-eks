@@ -55,8 +55,8 @@ else
   TARGET_NG_VERSION="blue"
 fi
 
-echo -e "${Y}Current nodegroup: $CURRENT_NG_VERSION${N}" | tee -a "$LOG_FILE"
-echo -e "${Y}Target  nodegroup: $TARGET_NG_VERSION${N}" | tee -a "$LOG_FILE"
+echo -e "${Y}Current node_group: $CURRENT_NG_VERSION${N}" | tee -a "$LOG_FILE"
+echo -e "${Y}Target  node_group: $TARGET_NG_VERSION${N}" | tee -a "$LOG_FILE"
 
 # --- Get current control plane version
 CP_VERSION=$(aws eks describe-cluster \
@@ -67,12 +67,12 @@ CP_VERSION=$(aws eks describe-cluster \
 VALIDATE $? "Fetch current control plane version"
 echo -e "${Y}Control plane version: $CP_VERSION${N}" | tee -a "$LOG_FILE"
 
-# --- Detect current nodegroup kubelet minor version
-KUBELET_VER=$(kubectl get nodes -l "nodegroup=${CURRENT_NG_VERSION}" \
+# --- Detect current node_group kubelet minor version
+KUBELET_VER=$(kubectl get nodes -l "node_group=${CURRENT_NG_VERSION}" \
   -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}' 2>/dev/null)
 
 if [[ -z "$KUBELET_VER" ]]; then
-  echo -e "${R}No nodes found with label nodegroup=${CURRENT_NG_VERSION}. Check node labels.${N}" | tee -a "$LOG_FILE"
+  echo -e "${R}No nodes found with label node_group=${CURRENT_NG_VERSION}. Check node labels.${N}" | tee -a "$LOG_FILE"
   exit 1
 fi
 
@@ -98,59 +98,59 @@ fi
 
 echo -e "${Y}Planned versions: blue=$NG_BLUE_VERSION green=$NG_GREEN_VERSION cp=$CP_VERSION${N}" | tee -a "$LOG_FILE"
 
-# ---- STEP2-A: Create target nodegroup (enable both)
+# ---- STEP2-A: Create target node_group (enable both)
 
 
 terraform plan \
   -var="eks_version=$CP_VERSION" \
   -var="enable_blue=$ENABLE_BLUE" \
   -var="enable_green=$ENABLE_GREEN" \
-  -var="eks_nodegroup_blue_version=$NG_BLUE_VERSION" \
-  -var="eks_nodegroup_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
+  -var="eks_node_group_blue_version=$NG_BLUE_VERSION" \
+  -var="eks_node_group_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
 VALIDATE ${PIPESTATUS[0]} "Terraform plan (create target)"
-CONFIRM "STEP2-A: Create target nodegroup. Terraform PLAN now?"
+CONFIRM "STEP2-A: Create target node_group. Terraform PLAN now?"
 terraform apply -auto-approve \
   -var="eks_version=$CP_VERSION" \
   -var="enable_blue=$ENABLE_BLUE" \
   -var="enable_green=$ENABLE_GREEN" \
-  -var="eks_nodegroup_blue_version=$NG_BLUE_VERSION" \
-  -var="eks_nodegroup_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
+  -var="eks_node_group_blue_version=$NG_BLUE_VERSION" \
+  -var="eks_node_group_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
 VALIDATE ${PIPESTATUS[0]} "Terraform apply (create target)"
 
 # --- Wait for target nodes Ready
-echo -e "${Y}Waiting for target nodes Ready: nodegroup=${TARGET_NG_VERSION}${N}" | tee -a "$LOG_FILE"
-kubectl get nodes -l "nodegroup=${TARGET_NG_VERSION}" -o wide | tee -a "$LOG_FILE"
+echo -e "${Y}Waiting for target nodes Ready: node_group=${TARGET_NG_VERSION}${N}" | tee -a "$LOG_FILE"
+kubectl get nodes -l "node_group=${TARGET_NG_VERSION}" -o wide | tee -a "$LOG_FILE"
 
-kubectl wait --for=condition=Ready node -l "nodegroup=${TARGET_NG_VERSION}" --timeout=30m 2>&1 | tee -a "$LOG_FILE"
+kubectl wait --for=condition=Ready node -l "node_group=${TARGET_NG_VERSION}" --timeout=30m 2>&1 | tee -a "$LOG_FILE"
 VALIDATE ${PIPESTATUS[0]} "Wait for target nodes Ready"
 
 # --- Remove upgrade taint from target nodes (if exists)
-echo -e "${Y}Removing upgrade taint from target nodes (if exists): nodegroup=${TARGET_NG_VERSION}${N}" | tee -a "$LOG_FILE"
-TARGET_NODES=$(kubectl get nodes -l "nodegroup=${TARGET_NG_VERSION}" -o name)
+echo -e "${Y}Removing upgrade taint from target nodes (if exists): node_group=${TARGET_NG_VERSION}${N}" | tee -a "$LOG_FILE"
+TARGET_NODES=$(kubectl get nodes -l "node_group=${TARGET_NG_VERSION}" -o name)
 for n in $TARGET_NODES; do
   kubectl taint "$n" upgrade=true:NoSchedule- >/dev/null 2>&1
 done
 echo -e "${G}Taint removal attempted (safe if not present).${N}" | tee -a "$LOG_FILE"
 
 # --- Cordon + Drain current nodes
-CONFIRM "Proceed to cordon+drain CURRENT nodegroup=${CURRENT_NG_VERSION} ?"
+CONFIRM "Proceed to cordon+drain CURRENT node_group=${CURRENT_NG_VERSION} ?"
 
-echo -e "${Y}Cordoning current nodes: nodegroup=${CURRENT_NG_VERSION}${N}" | tee -a "$LOG_FILE"
-kubectl cordon -l "nodegroup=${CURRENT_NG_VERSION}" 2>&1 | tee -a "$LOG_FILE"
-VALIDATE ${PIPESTATUS[0]} "Cordon current nodegroup"
+echo -e "${Y}Cordoning current nodes: node_group=${CURRENT_NG_VERSION}${N}" | tee -a "$LOG_FILE"
+kubectl cordon -l "node_group=${CURRENT_NG_VERSION}" 2>&1 | tee -a "$LOG_FILE"
+VALIDATE ${PIPESTATUS[0]} "Cordon current node_group"
 
-echo -e "${Y}Draining current nodes: nodegroup=${CURRENT_NG_VERSION}${N}" | tee -a "$LOG_FILE"
-kubectl drain -l "nodegroup=${CURRENT_NG_VERSION}" \
+echo -e "${Y}Draining current nodes: node_group=${CURRENT_NG_VERSION}${N}" | tee -a "$LOG_FILE"
+kubectl drain -l "node_group=${CURRENT_NG_VERSION}" \
   --ignore-daemonsets \
   --delete-emptydir-data \
   --grace-period=60 \
   --timeout=30m 2>&1 | tee -a "$LOG_FILE"
-VALIDATE ${PIPESTATUS[0]} "Drain current nodegroup"
+VALIDATE ${PIPESTATUS[0]} "Drain current node_group"
 
 echo -e "${Y}Quick check for unhealthy pods...${N}" | tee -a "$LOG_FILE"
 kubectl get pods -A | egrep -i "Pending|CrashLoopBackOff|ImagePullBackOff" || true
 
-# ---- STEP2-B: Delete current nodegroup
+# ---- STEP2-B: Delete current node_group
 if [[ "$CURRENT_NG_VERSION" == "blue" ]]; then
   ENABLE_BLUE=false
   ENABLE_GREEN=true
@@ -166,16 +166,16 @@ terraform plan \
   -var="eks_version=$CP_VERSION" \
   -var="enable_blue=$ENABLE_BLUE" \
   -var="enable_green=$ENABLE_GREEN" \
-  -var="eks_nodegroup_blue_version=$NG_BLUE_VERSION" \
-  -var="eks_nodegroup_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
+  -var="eks_node_group_blue_version=$NG_BLUE_VERSION" \
+  -var="eks_node_group_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
 VALIDATE ${PIPESTATUS[0]} "Terraform plan (delete current)"
-CONFIRM "STEP2-B: Delete current nodegroup ($CURRENT_NG_VERSION). Terraform PLAN now?"
+CONFIRM "STEP2-B: Delete current node_group ($CURRENT_NG_VERSION). Terraform PLAN now?"
 terraform apply -auto-approve \
   -var="eks_version=$CP_VERSION" \
   -var="enable_blue=$ENABLE_BLUE" \
   -var="enable_green=$ENABLE_GREEN" \
-  -var="eks_nodegroup_blue_version=$NG_BLUE_VERSION" \
-  -var="eks_nodegroup_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
+  -var="eks_node_group_blue_version=$NG_BLUE_VERSION" \
+  -var="eks_node_group_green_version=$NG_GREEN_VERSION" | tee -a "$LOG_FILE"
 VALIDATE ${PIPESTATUS[0]} "Terraform apply (delete current)"
 
-echo -e "${G}STEP 2 completed successfully. Target nodegroup=${TARGET_NG_VERSION} is now serving workloads.${N}" | tee -a "$LOG_FILE"
+echo -e "${G}STEP 2 completed successfully. Target node_group=${TARGET_NG_VERSION} is now serving workloads.${N}" | tee -a "$LOG_FILE"
