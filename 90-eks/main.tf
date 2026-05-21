@@ -56,7 +56,7 @@ module "eks" {
       #   }
       # }
       labels = {
-        node_group = "blue"
+        nodegroup = "blue"
       }
     }
 
@@ -83,7 +83,7 @@ module "eks" {
     #   }
     # }
       labels = {
-        node_group = "green"
+        nodegroup = "green"
       }
     }
   
