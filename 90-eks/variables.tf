@@ -17,11 +17,11 @@ variable "eks_version" {
 
 }
 
-variable "eks_node_group_blue_version"{
+variable "eks_nodegroup_blue_version"{
 
 }
 
-variable "eks_node_group_green_version"{
+variable "eks_nodegroup_green_version"{
 
 }
 
