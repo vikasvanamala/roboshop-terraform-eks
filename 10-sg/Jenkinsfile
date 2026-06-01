@@ -1,0 +1,135 @@
+pipeline {
+    agent {
+        node {
+            label 'AGENT-1'
+        }
+    }
+    environment {
+        course = "jenkins"
+    }
+    options {
+        timeout(time: 10, unit: 'MINUTES') 
+        disableConcurrentBuilds()
+        ansiColor('xterm')
+    }
+    // parameters {
+    //     string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
+    //     text(name: 'BIOGRAPHY', defaultValue: '', description: 'Enter some information about the person')
+    //     booleanParam(name: 'DEPLOY', defaultValue: false, description: 'Toggle this value')
+    //     choice(name: 'CHOICE', choices: ['One', 'Two', 'Three'], description: 'Pick something')
+    //     password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'Enter a password')
+    // }
+    
+     stages {
+        stage('Init') {
+            steps {
+                script{
+                    withAWS(region:'us-east-1',credentials:'aws-creds') {
+                        sh """
+                            cd 10-sg
+                            terraform init
+                        """
+                    }
+                }
+            }
+        }
+        stage('Init') {
+            steps {
+                script{
+                    withAWS(region:'us-east-1',credentials:'aws-creds') {
+                        sh """
+                            cd 10-sg
+                            terraform plan
+                        """
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script{
+                    withAWS(region:'us-east-1',credentials:'aws-creds') {
+                        sh """
+                            cd 10-sg
+                            terraform apply -auto-approve
+                        """
+                    }
+                }
+            }
+        }
+         stage('parallel triggers') {
+            parallel {
+                stage('bastion'){
+                    steps {
+                        script {
+                            build job: '20-bastion',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+                }
+                stage('sg-rules'){
+                    steps {
+                        script {
+                            build job: '30-sg-rules',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+                }
+                stage('ecr'){
+                    steps {
+                        script {
+                            build job: '40-ecr',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+                }
+                stage('acm'){
+                    steps {
+                        script {
+                            build job: '70-acm',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+                }
+                stage('eks'){
+                    steps {
+                        script {
+                            build job: '90-eks',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+                }
+            }
+
+        }
+        stage('ALB'){
+                    steps {
+                        script {
+                            build job: '80-frontend-alb',
+                                wait: false, // Wait for completion
+                                propagate: false // Propagate status
+                        }
+                    }
+        }
+    }
+    post {
+        always {
+            echo 'i will always say hello/....'
+            cleanWs()
+        }
+        success {
+            echo 'I will run if success'
+        }
+        failure {
+            echo 'I will run if failure'
+        }
+        aborted {
+            echo 'pipeline is aborted'
+        }
+    }
+}
