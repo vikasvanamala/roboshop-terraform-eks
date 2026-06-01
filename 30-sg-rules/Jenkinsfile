@@ -45,7 +45,7 @@ pipeline {
                 }
             }
         }
-        stage('Deploy') 
+        stage('Deploy') {
             
             steps {
                 script{
@@ -58,7 +58,7 @@ pipeline {
                 }
             }
         }
-    }
+    
     post {
         always {
             echo 'i will always say hello/....'
